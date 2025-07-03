@@ -1,0 +1,433 @@
+{
+  "name": "AI Travel Plan",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "🌍 Personal Travel Planner",
+        "formDescription": "Plan your next adventure in seconds!\nJust enter your destination, travel dates, and email — and we'll send you a personalized itinerary with weather forecasts and visa details.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Where are you planning to travel?",
+              "placeholder": "Where are you planning to travel?",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "When does your trip start?",
+              "fieldType": "date",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "When does your trip end?",
+              "fieldType": "date",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "What's your email to receive the plan?",
+              "fieldType": "email",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        -540,
+        -100
+      ],
+      "id": "cc5e4ee4-ff2f-4c3c-8cbc-4417c7b1cca2",
+      "name": "On form submission",
+      "webhookId": "ca55c52d-5090-4f36-be40-097ee614ec82"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c9619d57-f331-43d4-bfec-70f2836ba6bb",
+              "name": "prompt",
+              "value": "={{\n  (() => {\n    const destination = $json[\"Where are you planning to travel?\"] || \"your destination\";\n    const startDate = $json[\"When does your trip start?\"] || \"start date\";\n    const endDate = $json[\"When does your trip end?\"] || \"end date\";\n\n    const start = new Date(startDate);\n    const end = new Date(endDate);\n    const oneDay = 1000 * 60 * 60 * 24;\n    const tripDays = Math.max(Math.round((end - start) / oneDay) - 1, 1);\n\n    return `You are a travel planner AI. Create a detailed ${tripDays}-day travel itinerary for a trip to ${destination}. The travel dates are from ${startDate} to ${endDate}. Do NOT make up any other location or dates. Exclude arrival and departure days which are meant for flights. Generate the plan only for ${tripDays} full days between those dates. Include daily activities, food suggestions, costs, and travel tips. Stick strictly to the provided dates and location — no hallucinations like Paris or October.`;\n  })()\n}}\n",
+              "type": "string"
+            },
+            {
+              "id": "240d13c6-9a6a-45fe-8fed-868bd9848cbe",
+              "name": "cityForGeocoding",
+              "value": "={{ $json[\"Where are you planning to travel?\"] }}",
+              "type": "string"
+            },
+            {
+              "id": "c2657a39-7fa5-4e5f-835c-1ab2cc3567a7",
+              "name": "start_date",
+              "value": "={{ $json['When does your trip start?'] }}",
+              "type": "string"
+            },
+            {
+              "id": "d744710e-46e7-484e-944d-dce8013870c2",
+              "name": "end_date",
+              "value": "={{ $json['When does your trip end?'] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -400,
+        -100
+      ],
+      "id": "41cc39aa-cd6b-4a33-99be-848b284d0102",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_OPENROUTER_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: \"mistralai/mixtral-8x7b-instruct\",\n  messages: [\n    {\n      role: \"user\",\n      content: $json[\"prompt\"]\n    }\n  ]\n}) }}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        280,
+        -320
+      ],
+      "id": "5676f76f-3697-49d4-a93e-8193d6411040",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "// AI response from OpenRouter is in:\n// response.body.choices[0].message.content\n\nreturn [\n  {\n    json: {\n      itinerary: $json[\"choices\"][0][\"message\"][\"content\"]\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        -200
+      ],
+      "id": "b0f5d716-e76d-4fa7-abce-ae4fb6fb1c3c",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "fromEmail": "YOUR_EMAIL@example.com",
+        "toEmail": "RECIPIENT_EMAIL@example.com",
+        "subject": "🧳 Your AI-Powered Travel Itinerary",
+        "text": "Here's your personalized itinerary:",
+        "html": "={{ $json[\"htmlOutput\"] }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.mailjet",
+      "typeVersion": 1,
+      "position": [
+        980,
+        -80
+      ],
+      "id": "f3d3d8ea-c094-4067-b6c9-6e33ccd0526f",
+      "name": "Mailjet",
+      "credentials": {
+        "mailjetEmailApi": {
+          "id": "YOUR_MAILJET_CREDENTIAL_ID",
+          "name": "Mailjet Email account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.opencagedata.com/geocode/v1/json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{$json[\"cityForGeocoding\"]}}"
+            },
+            {
+              "name": "key",
+              "value": "YOUR_OPENCAGE_API_KEY"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -200,
+        0
+      ],
+      "id": "f990390b-28d4-4255-84c7-d50956f69322",
+      "name": "GEO Code Destination"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5e909cda-86a3-45b1-8d20-e02513a34aad",
+              "name": "lat",
+              "value": "={{$json[\"results\"][0][\"geometry\"][\"lat\"]}}",
+              "type": "string"
+            },
+            {
+              "id": "f1f42ecf-d6ac-4afc-88ce-f226d7c67f64",
+              "name": "lng",
+              "value": "={{$json[\"results\"][0][\"geometry\"][\"lng\"]}}",
+              "type": "string"
+            },
+            {
+              "id": "33d2f98a-ef15-4787-ba5c-8b217a0786e9",
+              "name": "destination",
+              "value": "={{$json[\"results\"][0][\"formatted\"]}}",
+              "type": "string"
+            },
+            {
+              "id": "349fa08d-7a53-44f1-8e21-854ad76f8bfe",
+              "name": "start_date",
+              "value": "={{$node[\"Edit Fields\"].json[\"start_date\"]}}",
+              "type": "string"
+            },
+            {
+              "id": "7d57c7a2-7f5f-447f-a1d3-1156a3eb0e39",
+              "name": "end_date",
+              "value": "={{$node[\"Edit Fields\"].json[\"end_date\"]}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -60,
+        -100
+      ],
+      "id": "2669452e-9425-409f-9ea7-0bbb2e47e24b",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const start = new Date($json[\"start_date\"]);\nconst end = new Date($json[\"end_date\"]);\nconst dates = [];\n\nfor (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {\n  const dateStr = new Date(d).toISOString().split('T')[0]; // e.g., \"2025-06-25\"\n  dates.push({\n    json: {\n      start_date: dateStr,\n      end_date: dateStr,\n      lat: $json[\"lat\"],\n      lng: $json[\"lng\"]\n    }\n  });\n}\n\nreturn dates;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        -100
+      ],
+      "id": "e40fb9c4-7b6c-4c16-9a26-801492bd768f",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.open-meteo.com/v1/forecast?latitude={{$json[\"lat\"]}}&longitude={{$json[\"lng\"]}}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto&start_date={{$json[\"start_date\"]}}&end_date={{$json[\"end_date\"]}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        -100
+      ],
+      "id": "b7563b6e-4f77-492e-b686-b14f2043dd38",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// You're receiving multiple items (1 per day), each with a `daily` object\nconst result = [];\n\nfor (const item of items) {\n  const daily = item.json.daily;\n\n  result.push({\n    json: {\n      date: daily.time[0],\n      summary: `📅 ${daily.time[0]}: 🌡️ Max ${daily.temperature_2m_max[0]}°C / Min ${daily.temperature_2m_min[0]}°C, ☔ Rain: ${daily.precipitation_sum[0]}mm`\n    }\n  });\n}\n\nreturn result;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        360,
+        -100
+      ],
+      "id": "39848003-11db-4e66-8abd-afbaf0b5e9d0",
+      "name": "Code2"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        660,
+        60
+      ],
+      "id": "075201b9-c4b7-4e5d-b0a0-608f4958fa46",
+      "name": "Merge",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const itinerary = $json[\"itinerary\"] || \"Itinerary not available.\";\nconst destination = $json[\"destination\"] || \"your destination\";\nconst startDate = $json[\"start_date\"] || \"start date\";\nconst endDate = $json[\"end_date\"] || \"end date\";\n\n// If `weatherSummaries` is an array passed from previous node\nconst weatherItems = $items().filter(item => item.json.summary && item.json.date);\n\nlet weatherHtml = \"<h2 style='color: #1e3799; font-size: 22px; margin-bottom: 10px;'>🌦️ Weather Forecast</h2><div style='background-color: #fefefe; padding: 20px; border-radius: 10px; border: 1px solid #dcdde1; font-size: 16px; color: #2f3640; line-height: 1.6;'>\";\n\nif (weatherItems.length === 0) {\n  weatherHtml += \"No weather data available.\";\n} else {\n  weatherItems.forEach(item => {\n    weatherHtml += `${item.json.summary}<br>`;\n  });\n}\n\nweatherHtml += \"</div>\";\n\n// Convert itinerary \\n to <br>\nconst formattedItinerary = itinerary\n  .split(/Day \\d+: /g)\n  .filter(section => section.trim())\n  .map((section, index) => {\n    const lines = section.trim().split(\"\\n\").filter(line => line.trim());\n    const dayTitle = `Day ${index + 1}: ${lines[0]}`;\n    const activities = lines.slice(1).map(item => {\n      if (/^\\d{1,2}:\\d{2}/.test(item)) {\n        // starts with time like \"9:00 AM\"\n        return `<li><strong>${item}</strong></li>`;\n      } else {\n        return `<li>${item}</li>`;\n      }\n    }).join(\"\");\n\n    return `\n      <div style=\"margin-bottom: 25px;\">\n        <h3 style=\"color: #e67e22; font-size: 20px; margin-bottom: 8px;\">📅 ${dayTitle}</h3>\n        <ul style=\"padding-left: 20px; color: #2f3640; font-size: 15px; line-height: 1.5;\">\n          ${activities}\n        </ul>\n      </div>\n    `;\n  }).join(\"\");\n\nconst itineraryHtml = `\n  <div style=\"background-color: #f5f6fa; padding: 20px; border-radius: 10px; border: 1px solid #dcdde1; font-size: 16px; color: #2f3640; line-height: 1.6;\">\n    ${formattedItinerary}\n  </div>\n`;\n\n\nconst html = `\n<div style=\"font-family: 'Segoe UI', Roboto, Arial, sans-serif; max-width: 700px; margin: auto; padding: 30px; background-color: #ffffff; border-radius: 12px; border: 1px solid #e0e0e0;\">\n  <h1 style=\"color: #2d98da; text-align: center; font-size: 28px; margin-bottom: 10px;\">🧳 Your AI Travel Plan</h1>\n  <p style=\"text-align: center; font-size: 16px; color: #555;\">Generated by your Personal Travel Planner Bot</p>\n  <hr style=\"border: none; border-top: 2px solid #2d98da; margin: 20px 0;\">\n\n  <h2 style=\"color: #1e3799; font-size: 22px; margin-bottom: 10px;\">🌍 Destination & Dates</h2>\n  <p style=\"color: #333; font-size: 16px; margin-bottom: 20px;\">\n    You asked for a travel itinerary to \n    <strong style=\"color: #e55039;\">${destination}</strong> from \n    <strong style=\"color: #e55039;\">${startDate}</strong> to \n    <strong style=\"color: #e55039;\">${endDate}</strong>.\n  </p>\n\n  ${weatherHtml}\n\n  <h2 style=\"color: #1e3799; font-size: 22px; margin: 30px 0 10px;\">🗓️ Itinerary Overview</h2>\n  <div style=\"background-color: #f5f6fa; padding: 20px; border-radius: 10px; border: 1px solid #dcdde1; font-size: 16px; color: #2f3640; line-height: 1.6;\">\n    ${itineraryHtml}\n  </div>\n\n  <hr style=\"border: none; border-top: 1px solid #dcdde1; margin: 30px 0;\">\n  <p style=\"text-align: center; color: #718093; font-size: 14px;\">Travel safe and explore more!<br><strong>— Your AI Travel Planner Bot</strong></p>\n</div>\n`;\n\nreturn [{ json: { htmlOutput: html } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        820,
+        100
+      ],
+      "id": "27a80c4d-f31d-405d-8bc4-291dc7b15ec2",
+      "name": "Code3"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GEO Code Destination",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GEO Code Destination": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Code2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code2": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code3": {
+      "main": [
+        [
+          {
+            "node": "Mailjet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "7f0bbb8d-571c-4871-a67d-0fe585e51fb4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "33f4683b5078ad4b90eb58d5661115213b946f70235c48c530daa1b2df556611"
+  },
+  "id": "SFejmTP6MsrU2jxl",
+  "tags": []
+}
